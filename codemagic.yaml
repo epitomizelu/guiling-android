@@ -9,8 +9,18 @@ workflows:
       - name: Prepare Android SDK
         script: |
           set -eu
-          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > local.properties
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/share/android-sdk}}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          SDK_MANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDK_MANAGER" ]; then
+            SDK_MANAGER="$(command -v sdkmanager || true)"
+          fi
+          if [ ! -x "$SDK_MANAGER" ]; then
+            echo "Android SDK manager missing under $ANDROID_HOME/cmdline-tools/latest/bin" >&2
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          "$SDK_MANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-35" "build-tools;35.0.0"
           chmod +x gradlew
       - name: Unit tests, lint and APK
         script: |
@@ -19,7 +29,8 @@ workflows:
       - name: Verify APK signature and checksum
         script: |
           set -eu
-          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          SDK_ROOT="$(sed -n 's/^sdk.dir=//p' local.properties)"
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
           cd app/build/outputs/apk/debug
           shasum -a 256 app-debug.apk > app-debug.apk.sha256
     artifacts:
