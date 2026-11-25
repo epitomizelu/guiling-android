@@ -37,9 +37,25 @@ public final class MainActivity extends Activity {
         TextView title=text("归零记账助手",28,ink);title.setTypeface(null,Typeface.BOLD);root.addView(title);
         LinearLayout nav=new LinearLayout(this);String[] labels={"待确认","记录","设置"};for(int i=0;i<labels.length;i++){final int tab=i;Button b=new Button(this);b.setText(labels[i]);b.setTextColor(page==i?green:muted);b.setOnClickListener(v->{page=tab;show();});nav.addView(b,new LinearLayout.LayoutParams(0,dp(52),1));}root.addView(nav);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);content=stack();content.setPadding(0,dp(12),0,dp(20));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if(page==2)settings();else entries();
+        if(page==3)captureHistory();else if(page==2)settings();else entries();
     }
     private boolean bound(){return !Vault.prefs(this).getString("token","").isEmpty();}
+    private void captureHistory(){
+        LinearLayout header=card();header.addView(text("采集日志",22,ink));
+        header.addView(text("通知服务："+(PaymentListener.connected?"已连接":"未连接")+"\n记录微信、支付宝通知的接收与处理结果，以及服务连接状态。仅保留本机最近200条，不保存通知正文，不上传服务器。日志不是消费记录，也不表示已入账。",14,muted));
+        button(header,"刷新日志",this::show);
+        button(header,"返回设置",()->{page=2;show();});
+        button(header,"清空日志",()->new AlertDialog.Builder(this).setTitle("清空采集日志？").setMessage("不会删除待确认消费或已记账记录。").setPositiveButton("清空",(d,w)->{CaptureLog.clear(this);show();}).setNegativeButton("取消",null).show());
+        JSONArray rows=CaptureLog.read(this);
+        if(rows.length()==0)header.addView(text("暂无日志。更新前的通知无法补记；保持采集开启，等待下一条新通知。",14,muted));
+        for(int i=0;i<rows.length();i++){
+            JSONObject row=rows.optJSONObject(i);if(row==null)continue;
+            LinearLayout item=card();
+            item.addView(text(Instant.ofEpochMilli(row.optLong("time")).atZone(ZoneId.of("Asia/Shanghai")).toLocalDateTime().toString().replace('T',' '),12,muted));
+            item.addView(text(row.optString("source")+" · "+row.optString("result"),17,ink));
+            item.addView(text(row.optString("reason"),14,muted));
+        }
+    }
     private boolean notificationAccess(){String allowed=Settings.Secure.getString(getContentResolver(),"enabled_notification_listeners");if(allowed==null)return false;ComponentName ours=new ComponentName(this,PaymentListener.class);for(String s:allowed.split(":"))if(ours.equals(ComponentName.unflattenFromString(s)))return true;return false;}
     private void entries(){
         try(Store db=new Store(this)){
@@ -96,17 +112,18 @@ public final class MainActivity extends Activity {
         LinearLayout capture=card();capture.addView(text("2 / 通知采集",20,ink));
         capture.addView(text("通知使用权："+(notificationAccess()?"已授权":"未授权")+"\n服务连接："+(PaymentListener.connected?"已连接":"未连接"),14,green));
         button(capture,"打开通知使用权设置",()->startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+        button(capture,"查看采集日志",()->{page=3;show();});
         toggle(capture,"允许采集支付通知","capture",Vault.prefs(this).getBoolean("capture",false));
         toggle(capture,"明确消费自动入账","automatic",Vault.prefs(this).getBoolean("automatic",false));
         toggle(capture,"暂停上传（仍可本地采集）","pause_upload",Vault.prefs(this).getBoolean("pause_upload",false));
-        long last=Vault.prefs(this).getLong("last_capture",0);capture.addView(text(last==0?"尚未收到支付服务通知":"最近采集："+Instant.ofEpochMilli(last).atZone(ZoneId.of("Asia/Shanghai")).toLocalDateTime().toString().replace('T',' '),13,muted));
+        long last=Vault.prefs(this).getLong("last_capture",0);capture.addView(text(last==0?"尚未成功识别并保存支付通知；接收情况请查看采集日志":"最近识别保存："+Instant.ofEpochMilli(last).atZone(ZoneId.of("Asia/Shanghai")).toLocalDateTime().toString().replace('T',' '),13,muted));
         String err=Vault.prefs(this).getString("capture_error","");if(!err.isEmpty())capture.addView(text(err,13,muted));
         LinearLayout help=card();help.addView(text("小米14安装与排查",20,ink));help.addView(text("① 安装后打开通知使用权；部分系统需先在应用信息页允许受限制的设置。\n② 在系统设置中搜索本应用的自启动、后台运行或省电设置，允许必要的后台运行。HyperOS版本不同，入口可能不同。\n③ 打开微信/支付宝系统通知及消息详情；微信支付消息不要设为免打扰。\n④ 锁屏、重启后各做一次实际支付通知测试。只在微信内显示的消息无法读取。\n⑤ 没有识别到账户时会停留在待确认，不会猜着扣款。",14,muted));
         button(help,"本地解析演示（不入账）",this::demo);
         LinearLayout privacy=card();privacy.addView(text("数据与隐私",20,ink));privacy.addView(text("系统通知权限范围较广，本应用在手机本地仅筛选微信和支付宝的指定支付服务消息。通知原文留在本机；服务器只接收确认后的记账字段。无广告、无分析SDK，不读取聊天数据库。密钥用Android Keystore加密保存，禁止系统备份。\n此版本不自动处理退款、转账或还款。匹配规则需要用你的真实通知验证，不能保证每笔都采集。",14,muted));
         button(privacy,"解除绑定并清空本地记录",()->new AlertDialog.Builder(this).setTitle("解除绑定").setMessage("只清空手机记录和密钥，服务器账本不会删除。为避免已发出但响应丢失的请求被重复记账，有待上传或提交被拒绝的记录时不能解除。先核对处理这些记录。")
-            .setPositiveButton("确认解除",(d,w)->{try(Store s=new Store(this)){if(s.count("queued")>0||s.count("blocked")>0){toast("仍有提交中的记录，请先核对，或联系维护者处理");return;}s.clear();Vault.prefs(this).edit().clear().commit();getSystemService(android.app.job.JobScheduler.class).cancel(1001);show();}}).setNegativeButton("取消",null).show());
-        content.addView(text("归零记账助手 0.1.0 · Android 8.0+\n支付通知采集测试版",12,muted));
+            .setPositiveButton("确认解除",(d,w)->{try(Store s=new Store(this)){if(s.count("queued")>0||s.count("blocked")>0){toast("仍有提交中的记录，请先核对，或联系维护者处理");return;}s.clear();CaptureLog.clear(this);Vault.prefs(this).edit().clear().commit();getSystemService(android.app.job.JobScheduler.class).cancel(1001);show();}}).setNegativeButton("取消",null).show());
+        content.addView(text("归零记账助手 0.1.1 · Android 8.0+\n支付通知采集测试版",12,muted));
     }
     private void bind(){
         LinearLayout form=stack();form.setPadding(dp(20),dp(8),dp(20),dp(12));EditText key=field(form,"手机助手专用 API Key","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);

@@ -14,6 +14,17 @@ public class DeviceTest {
     @Before public void setup(){context=InstrumentationRegistry.getInstrumentation().getTargetContext();store=new Store(context);store.clear();Vault.prefs(context).edit().clear().commit();}
     @After public void cleanup(){store.close();}
     private Parser.Result parsed(){return new Parser.Result(true,"微信","10.10","餐饮","asset:2","早餐","信息完整",true);}
+    @Test public void captureLogIsBoundedAndIndependentOfLedger() throws Exception {
+        CaptureLog.clear(context);
+        String id=store.add("log-test","log-sig",1,"2026-01-01","raw",parsed(),false);
+        for(int i=0;i<205;i++)CaptureLog.add(context,"支付宝","未匹配","event-"+i);
+        JSONArray rows=CaptureLog.read(context);
+        assertEquals(200,rows.length());
+        assertEquals("event-204",rows.getJSONObject(0).getString("reason"));
+        assertEquals("event-5",rows.getJSONObject(199).getString("reason"));
+        CaptureLog.clear(context);assertEquals(0,CaptureLog.read(context).length());
+        assertEquals("pending",store.get(id).getString("status"));
+    }
     @Test public void queueAndNotificationDedup() throws Exception {
         String id=store.add("event-1","signature",10000,"2026-01-01","raw",parsed(),true);
         assertNotNull(id);assertNull(store.add("event-1","signature",10001,"2026-01-01","raw",parsed(),true));
