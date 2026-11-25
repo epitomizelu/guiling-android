@@ -21,6 +21,18 @@
 
 ## Codemagic 云构建（首选）
 
+### 发布版与应用内更新（0.1.2起）
+
+在 Codemagic 应用的 Environment variables 中添加分组 `guiling_release`，将本机保管的发布凭据文件完整内容填入 `GUILING_RELEASE_BUNDLE_BASE64`，勾选 Secret。不要将凭据提交到 GitHub。此凭据包含固定发布签名和仅能发布 APK 的专用 SSH 密钥，应备份。
+
+选择 main 分支的 **Guiling Android Release + Aliyun** 工作流（`android-release`）。流程依次运行单元测试、Lint、打包、签名校验，然后自动上传到阿里云。测试或校验失败不会上传。每次正式发布须递增 `versionCode`；服务器拒绝重复版本号和回退发布。首次构建成功前，版本地址返回404。
+
+版本地址：`https://tasks.george888.top/guiling-android/latest.json`；APK地址由版本信息指定，例如 `https://tasks.george888.top/guiling-android/guiling-3.apk`。
+
+手机设置 → 检查更新 → 下载更新，下载完成校验SHA256、包名、版本号和现有签名后打开系统安装页面。如需“允许安装未知应用”，授权返回后点击“安装已下载更新”。下载时保持应用打开。此功能不会静默安装，不删除账本，也不会自动卸载旧版本。
+
+之前的调试版可能与固定发布签名不兼容；首次切换应先核对手机未同步记录，安装发布版并重新绑定。后续发布版使用同一签名可覆盖升级。调试工作流不会自动上传。
+
 仓库：https://github.com/epitomizelu/guiling-android
 
 1. 登录 Codemagic，添加此仓库，项目类型选原生 Android / Other，使用仓库根目录的 `codemagic.yaml`。

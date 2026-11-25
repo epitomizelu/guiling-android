@@ -4,3 +4,5 @@ local.properties
 signing.properties
 *.jks
 *.keystore
+.release-private/
+__pycache__/
