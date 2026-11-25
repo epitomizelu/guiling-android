@@ -1,0 +1,30 @@
+workflows:
+  android-debug:
+    name: Guiling Android APK
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      java: 17
+    scripts:
+      - name: Prepare Android SDK
+        script: |
+          set -eu
+          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > local.properties
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          chmod +x gradlew
+      - name: Unit tests, lint and APK
+        script: |
+          set -eu
+          ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - name: Verify APK signature and checksum
+        script: |
+          set -eu
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          cd app/build/outputs/apk/debug
+          shasum -a 256 app-debug.apk > app-debug.apk.sha256
+    artifacts:
+      - app/build/outputs/apk/debug/*.apk
+      - app/build/outputs/apk/debug/*.sha256
+      - app/build/outputs/apk/androidTest/debug/*.apk
+      - app/build/reports/**
+      - app/build/test-results/**/*.xml
