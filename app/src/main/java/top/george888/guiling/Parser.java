@@ -18,9 +18,14 @@ public final class Parser {
         String channel=wx?"微信":ali?"支付宝":"";
         String t=(title==null?"":title).trim(), body=(text==null?"":text).trim();
         boolean service=wx ? t.matches("^(微信支付|微信支付凭证|微信支付服务)(?:[· ·：:].*)?$") : ali && t.matches("^(支付宝|支付助手|支付宝支付助手|付款成功|支付成功)(?:[· ·：:].*)?$");
-        if (!service) return new Result(false,channel,"","其他","","","非支付服务消息，已忽略",false);
         String all=t+"\n"+body;
-        if (!Pattern.compile("支付|付款|消费|扣款|退款|还款|转账|收款").matcher(body).find()) return new Result(false,channel,"","其他","","","非交易消息",false);
+        // Alipay uses multiple notification titles. Unknown titles may be reviewed,
+        // but must never inherit the trusted-title automatic submission policy.
+        boolean reviewOnly=ali && !service && (
+            Pattern.compile("支付成功|付款成功|消费成功|成功支付|成功付款").matcher(all).find()
+            || AMOUNT.matcher(body).find() || REVERSE.matcher(body).find());
+        if (!service && !reviewOnly) return new Result(false,channel,"","其他","","","标题未匹配支付服务，正文也无明确付款信息",false);
+        if (!Pattern.compile("支付|付款|消费|扣款|退款|还款|转账|收款").matcher(all).find()) return new Result(false,channel,"","其他","","","非交易消息",false);
         boolean excluded=Pattern.compile("退款|还款|转账|收款(?!方)|到账|充值|提现|红包|失败|取消|关闭|待支付|待付款|验证码").matcher(all).find();
         Set<String> amounts=new LinkedHashSet<>();
         for (Pattern p:List.of(AMOUNT,REVERSE)) {
@@ -44,7 +49,8 @@ public final class Parser {
         String category=merchant.matches(".*(早餐|午餐|晚餐|餐饮|饭|咖啡|奶茶|面馆).* ".trim())?"餐饮":merchant.matches(".*(打车|滴滴|出租|公交|地铁).* ".trim())?"交通":"其他";
         boolean success=Pattern.compile("支付成功|付款成功|消费成功|成功支付|成功付款").matcher(all).find();
         String reason=excluded?"退款、转账、还款或非成功交易，禁止自动按消费提交":amount.isEmpty()?"未找到唯一明确的付款金额":account.isEmpty()?"付款账户未明确或匹配不唯一":!success?"未明确标记支付成功":"信息完整，可确认";
-        return new Result(true,channel,amount,category,account,merchant,reason,!excluded && !amount.isEmpty() && !account.isEmpty() && success);
+        if(reviewOnly&&!excluded)reason="支付宝通知标题未验证，请核对后手动确认；"+reason;
+        return new Result(true,channel,amount,category,account,merchant,reason,!reviewOnly && !excluded && !amount.isEmpty() && !account.isEmpty() && success);
     }
     public static String normalize(String value) {
         if(!value.matches("\\d{1,8}(?:\\.\\d{1,2})?"))throw new IllegalArgumentException("金额需为正数，最多两位小数");

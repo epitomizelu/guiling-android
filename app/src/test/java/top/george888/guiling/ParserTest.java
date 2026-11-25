@@ -16,4 +16,20 @@ public class ParserTest {
     @Test public void ambiguousAccount(){List<Parser.Account> two=new ArrayList<>(accounts);two.add(new Parser.Account("asset:7","招商银行"));assertFalse(Parser.parse("com.tencent.mm","微信支付","支付成功10元\n支付方式：招商银行",two).automatic());}
     @Test public void invalidMoney(){for(String s:List.of("-1","0","0.00","1.001","NaN","1e5","100000000")){try{Parser.normalize(s);fail(s);}catch(IllegalArgumentException expected){}}assertEquals("13.50",Parser.normalize("13.5"));}
     @Test public void fingerprint(){assertEquals(Parser.hash("a"),Parser.hash("a"));assertNotEquals(Parser.hash("a"),Parser.hash("b"));assertEquals(64,Parser.hash("a").length());}
+    @Test public void unknownAlipayTitleCanBeReviewedButNeverAutoPosted(){
+        Parser.Result r=Parser.parse("com.eg.android.AlipayGphone","交易提醒","你已成功付款13.50元\n付款方式：花呗",accounts);
+        assertTrue(r.candidate());assertEquals("13.50",r.amount());assertEquals("debt:8",r.account());assertFalse(r.automatic());
+        assertTrue(r.reason().contains("标题未验证"));
+    }
+    @Test public void unknownAlipayTitleWithoutAmountStillNeedsReview(){
+        Parser.Result r=Parser.parse("com.eg.android.AlipayGphone","交易提醒","付款成功，点击查看详情",accounts);
+        assertTrue(r.candidate());assertEquals("",r.amount());assertFalse(r.automatic());
+    }
+    @Test public void unknownAlipayTitleDoesNotConvertRefundIntoExpense(){
+        Parser.Result r=Parser.parse("com.eg.android.AlipayGphone","交易提醒","付款成功10元，已退款\n付款方式：花呗",accounts);
+        assertTrue(r.candidate());assertFalse(r.automatic());assertTrue(r.reason().startsWith("退款、"));
+    }
+    @Test public void ordinaryAlipayPromotionsRemainIgnored(){
+        assertFalse(Parser.parse("com.eg.android.AlipayGphone","优惠提醒","今天优惠10元，去看看",accounts).candidate());
+    }
 }
