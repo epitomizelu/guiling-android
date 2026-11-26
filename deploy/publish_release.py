@@ -10,7 +10,7 @@ apk = out / element['outputFile']
 data = apk.read_bytes()
 info = dict(versionCode=element['versionCode'], versionName=element['versionName'],
             file='guiling-%s.apk' % element['versionCode'], size=len(data),
-            sha256=hashlib.sha256(data).hexdigest(), notes='兼容支付宝非预设标题的付款通知：先保存到待确认，不直接自动扣账。')
+            sha256=hashlib.sha256(data).hexdigest(), notes='微信和支付宝统一放宽付款通知标题识别：有明确付款信息就进入待确认，未知标题不自动扣账。')
 (out / 'latest.json').write_text(json.dumps(info, ensure_ascii=False))
 archive = out / 'release.tar'
 with tarfile.open(archive, 'w') as t:

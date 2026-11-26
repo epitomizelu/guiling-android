@@ -6,7 +6,23 @@ public class ParserTest {
     private final List<Parser.Account> accounts=List.of(new Parser.Account("asset:2","招商银行"),new Parser.Account("asset:1","微信余额"),new Parser.Account("debt:8","花呗"),new Parser.Account("asset:6","支付宝余额"));
     private Parser.Result wx(String text){return Parser.parse("com.tencent.mm","微信支付",text,accounts);}
     @Test public void explicitPaymentAndAccount(){Parser.Result r=wx("支付成功\n支付金额：10.10元\n收款方：早餐店\n支付方式：招商银行（1234）");assertTrue(r.automatic());assertEquals("10.10",r.amount());assertEquals("asset:2",r.account());assertEquals("餐饮",r.category());}
-    @Test public void chatIgnored(){assertFalse(Parser.parse("com.tencent.mm","张三","支付成功10元",accounts).candidate());assertFalse(Parser.parse("com.fake.app","微信支付","支付成功10元",accounts).candidate());}
+    @Test public void ordinaryChatAndOtherPackagesIgnored(){assertFalse(Parser.parse("com.tencent.mm","张三","今天一起吃饭吗",accounts).candidate());assertFalse(Parser.parse("com.fake.app","微信支付","支付成功10元",accounts).candidate());}
+    @Test public void unknownWechatTitlesBecomeManualCandidates(){
+        for(String title:List.of("微信","微信支付（2条消息）","交易提醒","张三")){
+            Parser.Result r=Parser.parse("com.tencent.mm",title,"微信支付：支付成功10.10元\n付款方式：招商银行",accounts);
+            assertTrue(title,r.candidate());assertEquals("10.10",r.amount());assertEquals("asset:2",r.account());assertFalse(title,r.automatic());
+            assertTrue(r.reason().contains("标题未验证"));
+        }
+    }
+    @Test public void unknownWechatIncompleteAndExcludedMessagesStaySafe(){
+        Parser.Result missing=Parser.parse("com.tencent.mm","微信","支付成功，查看详情",accounts);
+        assertTrue(missing.candidate());assertEquals("",missing.amount());assertFalse(missing.automatic());
+        for(String type:List.of("退款","转账","还款","失败")){
+            Parser.Result r=Parser.parse("com.tencent.mm","微信","支付成功10元\n付款方式：招商银行\n"+type,accounts);
+            assertTrue(r.candidate());assertFalse(r.automatic());assertTrue(r.reason().startsWith("退款、"));
+        }
+        assertFalse(Parser.parse("com.tencent.mm","优惠提醒","支付有优惠，领10元优惠券",accounts).candidate());
+    }
     @Test public void unknownAccountStaysPending(){Parser.Result r=wx("支付成功10.10元");assertTrue(r.candidate());assertFalse(r.automatic());assertEquals("",r.account());}
     @Test public void excludedTypesCannotAutoSubmit(){for(String s:List.of("退款","还款","转账","收款","到账","充值","提现","失败","取消","待支付","验证码"))assertFalse(s,wx("支付成功10元\n付款方式：招商银行\n"+s).automatic());}
     @Test public void multipleAmountsStayPending(){assertEquals("",wx("支付成功10元\n支付成功20元\n付款方式：招商银行").amount());}
