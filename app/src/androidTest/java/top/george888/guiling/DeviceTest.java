@@ -14,6 +14,14 @@ public class DeviceTest {
     @Before public void setup(){context=InstrumentationRegistry.getInstrumentation().getTargetContext();store=new Store(context);store.clear();Vault.prefs(context).edit().clear().commit();}
     @After public void cleanup(){store.close();}
     private Parser.Result parsed(){return new Parser.Result(true,"微信","10.10","餐饮","asset:2","早餐","信息完整",true);}
+    @Test public void ignoredNotificationCanReturnToReviewButSubmittedOneCannot() throws Exception {
+        String id=store.add("restore-event","restore-sig",1,"2026-01-01","微信支付\n已支付¥10.20",parsed(),false);
+        store.ignore(id);assertEquals("ignored",store.get(id).getString("status"));
+        assertTrue(store.restore(id));assertEquals("pending",store.get(id).getString("status"));
+        assertEquals(0,store.count("queued"));
+        store.queue(id,"2026-01-01","10.20","其他","asset:2","核对后消费");
+        assertFalse(store.restore(id));assertEquals("queued",store.get(id).getString("status"));
+    }
     @Test public void captureLogIsBoundedAndIndependentOfLedger() throws Exception {
         CaptureLog.clear(context);
         String id=store.add("log-test","log-sig",1,"2026-01-01","raw",parsed(),false);

@@ -41,6 +41,7 @@ final class Store extends SQLiteOpenHelper {
     synchronized int count(String status){try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM entries WHERE status=?",new String[]{status})){c.moveToFirst();return c.getInt(0);}}
     synchronized void finish(String id,String status,String error,long remote){ContentValues v=new ContentValues();v.put("status",status);v.put("error",error);v.put("remote_id",remote);getWritableDatabase().update("entries",v,"id=?",new String[]{id});}
     synchronized void ignore(String id){ContentValues v=new ContentValues();v.put("status","ignored");getWritableDatabase().update("entries",v,"id=? AND status='pending'",new String[]{id});}
+    synchronized boolean restore(String id){ContentValues v=new ContentValues();v.put("status","pending");return getWritableDatabase().update("entries",v,"id=? AND status='ignored' AND body=''",new String[]{id})==1;}
     synchronized void clear(){getWritableDatabase().delete("entries",null,null);}
     private static JSONObject object(Cursor c){JSONObject o=new JSONObject();try{for(int i=0;i<c.getColumnCount();i++)o.put(c.getColumnName(i),c.getString(i));return o;}catch(JSONException e){throw new IllegalStateException(e);}}
 }

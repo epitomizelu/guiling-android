@@ -19,6 +19,10 @@ public final class Parser {
         boolean wx=pkg.equals("com.tencent.mm"), ali=pkg.equals("com.eg.android.AlipayGphone");
         String channel=wx?"微信":ali?"支付宝":"";
         String t=(title==null?"":title).trim(), body=(text==null?"":text).trim();
+        if(Pattern.compile("退款|退回|退还").matcher(t+"\n"+body).find())
+            return new Result(false,channel,"","其他","","","退款通知已忽略",false);
+        if(Pattern.compile("记账日报|账单日报").matcher(t+"\n"+body).find())
+            return new Result(false,channel,"","其他","","","记账日报已忽略",false);
         boolean service=wx ? t.matches("^(微信支付|微信支付凭证|微信支付服务)(?:[· ·：:].*)?$") : ali && t.matches("^(支付宝|支付助手|支付宝支付助手|付款成功|支付成功)(?:[· ·：:].*)?$");
         String all=t+"\n"+body;
         // Both payment apps use multiple notification titles. Unknown titles may be reviewed,
@@ -27,7 +31,7 @@ public final class Parser {
             Pattern.compile("支付成功|付款成功|消费成功|成功支付|成功付款").matcher(all).find()
             || AMOUNT.matcher(body).find() || REVERSE.matcher(body).find() || CURRENCY_AMOUNT.matcher(body).find());
         if (!service && !reviewOnly) return new Result(false,channel,"","其他","","","标题未匹配支付服务，正文也无明确付款信息",false);
-        if (!Pattern.compile("支付|付款|消费|扣款|退款|还款|转账|收款").matcher(all).find()) return new Result(false,channel,"","其他","","","非交易消息",false);
+        if (!Pattern.compile("支付|付款|消费|扣款|还款|转账|收款").matcher(body).find()) return new Result(false,channel,"","其他","","","非交易消息",false);
         boolean excluded=Pattern.compile("退款|还款|转账|收款(?!方)|到账|充值|提现|红包|失败|取消|关闭|待支付|待付款|验证码").matcher(all).find();
         Set<String> amounts=new LinkedHashSet<>();
         for (Pattern p:List.of(AMOUNT,REVERSE,CURRENCY_AMOUNT)) {

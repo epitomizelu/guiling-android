@@ -17,7 +17,7 @@ public class ParserTest {
     @Test public void unknownWechatIncompleteAndExcludedMessagesStaySafe(){
         Parser.Result missing=Parser.parse("com.tencent.mm","微信","支付成功，查看详情",accounts);
         assertTrue(missing.candidate());assertEquals("",missing.amount());assertFalse(missing.automatic());
-        for(String type:List.of("退款","转账","还款","失败")){
+        for(String type:List.of("转账","还款","失败")){
             Parser.Result r=Parser.parse("com.tencent.mm","微信","支付成功10元\n付款方式：招商银行\n"+type,accounts);
             assertTrue(r.candidate());assertFalse(r.automatic());assertTrue(r.reason().startsWith("退款、"));
         }
@@ -43,7 +43,15 @@ public class ParserTest {
     }
     @Test public void unknownAlipayTitleDoesNotConvertRefundIntoExpense(){
         Parser.Result r=Parser.parse("com.eg.android.AlipayGphone","交易提醒","付款成功10元，已退款\n付款方式：花呗",accounts);
-        assertTrue(r.candidate());assertFalse(r.automatic());assertTrue(r.reason().startsWith("退款、"));
+        assertFalse(r.candidate());assertFalse(r.automatic());assertEquals("退款通知已忽略",r.reason());
+    }
+    @Test public void refundsAndDailyReportsNeverBecomeExpenses(){
+        for(String pkg:List.of("com.tencent.mm","com.eg.android.AlipayGphone")){
+            assertFalse(Parser.parse(pkg,"微信支付","退款到账通知",accounts).candidate());
+            assertFalse(Parser.parse(pkg,"微信支付","昨日记账日报，点击查看详情",accounts).candidate());
+            assertFalse(Parser.parse(pkg,"退款到账","已支付¥10.20",accounts).candidate());
+        }
+        assertFalse(Parser.parse("com.tencent.mm","微信支付","今天的消息",accounts).candidate());
     }
     @Test public void ordinaryAlipayPromotionsRemainIgnored(){
         assertFalse(Parser.parse("com.eg.android.AlipayGphone","优惠提醒","今天优惠10元，去看看",accounts).candidate());
