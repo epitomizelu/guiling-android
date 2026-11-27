@@ -48,4 +48,20 @@ public class ParserTest {
     @Test public void ordinaryAlipayPromotionsRemainIgnored(){
         assertFalse(Parser.parse("com.eg.android.AlipayGphone","优惠提醒","今天优惠10元，去看看",accounts).candidate());
     }
+    @Test public void screenshotGroupedWechatPrefillsYuanWithoutYuanSuffix(){
+        Parser.Result r=Parser.parse("com.tencent.mm","微信支付","[2条]微信支付: 已支付¥10.20",accounts);
+        assertTrue(r.candidate());assertEquals("10.20",r.amount());assertFalse(r.automatic());
+        assertTrue(r.reason().contains("合并通知"));
+    }
+    @Test public void groupedWechatWithUnknownTitlePrefillsAndNeverAutoPosts(){
+        Parser.Result r=Parser.parse("com.tencent.mm","微信","[2条]微信支付: 已支付￥10.20\n付款方式：零钱",accounts);
+        assertTrue(r.candidate());assertEquals("10.20",r.amount());assertFalse(r.automatic());
+    }
+    @Test public void standaloneCurrencyPaymentWithoutYuanSuffixIsDetected(){
+        Parser.Result r=Parser.parse("com.eg.android.AlipayGphone","支付助手","付款成功¥13.50\n付款方式：花呗",accounts);
+        assertEquals("13.50",r.amount());assertTrue(r.automatic());
+    }
+    @Test public void plainCurrencyPromotionIsNotPayment(){
+        assertFalse(Parser.parse("com.tencent.mm","优惠提醒","可领¥10.20优惠券",accounts).candidate());
+    }
 }

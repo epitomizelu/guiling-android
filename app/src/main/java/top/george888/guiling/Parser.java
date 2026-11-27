@@ -12,6 +12,8 @@ public final class Parser {
     public record Result(boolean candidate, String channel, String amount, String category, String account, String merchant, String reason, boolean automatic) {}
     private static final Pattern AMOUNT = Pattern.compile("(?:支付金额|付款金额|交易金额|实付金额|支出金额|成功付款|成功支付|支付成功|付款成功|消费成功|支付|付款|消费|支出)\\s*[:：]?\\s*[¥￥]?\\s*([0-9]+(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?)\\s*元");
     private static final Pattern REVERSE = Pattern.compile("([0-9]+(?:\\.[0-9]{1,2})?)\\s*元\\s*(?:支付成功|付款成功)");
+    private static final Pattern CURRENCY_AMOUNT = Pattern.compile("(?:已支付|已付款|支付成功|付款成功|成功支付|成功付款|支付金额|付款金额|实付金额|支付|付款)\\s*[:：]?\\s*[¥￥]\\s*([0-9]+(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?)(?:\\s*元)?");
+    private static final Pattern GROUPED = Pattern.compile("[\\[【]\\s*[2-9][0-9]*\\s*条[\\]】]");
     private static final Pattern ACCOUNT = Pattern.compile("(?:支付方式|付款方式|扣款账户|付款账户)\\s*[:：]\\s*([^\\n；;]+)");
     public static Result parse(String pkg, String title, String text, List<Account> accounts) {
         boolean wx=pkg.equals("com.tencent.mm"), ali=pkg.equals("com.eg.android.AlipayGphone");
@@ -23,12 +25,12 @@ public final class Parser {
         // but must never inherit the trusted-title automatic submission policy.
         boolean reviewOnly=(wx || ali) && !service && (
             Pattern.compile("支付成功|付款成功|消费成功|成功支付|成功付款").matcher(all).find()
-            || AMOUNT.matcher(body).find() || REVERSE.matcher(body).find());
+            || AMOUNT.matcher(body).find() || REVERSE.matcher(body).find() || CURRENCY_AMOUNT.matcher(body).find());
         if (!service && !reviewOnly) return new Result(false,channel,"","其他","","","标题未匹配支付服务，正文也无明确付款信息",false);
         if (!Pattern.compile("支付|付款|消费|扣款|退款|还款|转账|收款").matcher(all).find()) return new Result(false,channel,"","其他","","","非交易消息",false);
         boolean excluded=Pattern.compile("退款|还款|转账|收款(?!方)|到账|充值|提现|红包|失败|取消|关闭|待支付|待付款|验证码").matcher(all).find();
         Set<String> amounts=new LinkedHashSet<>();
-        for (Pattern p:List.of(AMOUNT,REVERSE)) {
+        for (Pattern p:List.of(AMOUNT,REVERSE,CURRENCY_AMOUNT)) {
             Matcher m=p.matcher(all);
             while(m.find())try { String v=normalize(m.group(1).replace(",","")); if(!v.isEmpty())amounts.add(v); } catch(Exception ignored) {}
         }
@@ -49,8 +51,10 @@ public final class Parser {
         String category=merchant.matches(".*(早餐|午餐|晚餐|餐饮|饭|咖啡|奶茶|面馆).* ".trim())?"餐饮":merchant.matches(".*(打车|滴滴|出租|公交|地铁).* ".trim())?"交通":"其他";
         boolean success=Pattern.compile("支付成功|付款成功|消费成功|成功支付|成功付款").matcher(all).find();
         String reason=excluded?"退款、转账、还款或非成功交易，禁止自动按消费提交":amount.isEmpty()?"未找到唯一明确的付款金额":account.isEmpty()?"付款账户未明确或匹配不唯一":!success?"未明确标记支付成功":"信息完整，可确认";
-        if(reviewOnly&&!excluded)reason=channel+"通知标题未验证，请核对是否为真实消费后手动确认；"+reason;
-        return new Result(true,channel,amount,category,account,merchant,reason,!reviewOnly && !excluded && !amount.isEmpty() && !account.isEmpty() && success);
+        boolean grouped=GROUPED.matcher(all).find();
+        if(grouped&&!excluded)reason="合并通知可能包含多笔，请逐笔核对；"+reason;
+        else if(reviewOnly&&!excluded)reason=channel+"通知标题未验证，请核对是否为真实消费后手动确认；"+reason;
+        return new Result(true,channel,amount,category,account,merchant,reason,!grouped && !reviewOnly && !excluded && !amount.isEmpty() && !account.isEmpty() && success);
     }
     public static String normalize(String value) {
         if(!value.matches("\\d{1,8}(?:\\.\\d{1,2})?"))throw new IllegalArgumentException("金额需为正数，最多两位小数");
