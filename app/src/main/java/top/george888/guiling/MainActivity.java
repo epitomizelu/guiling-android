@@ -129,7 +129,7 @@ public final class MainActivity extends Activity {
             }catch(Exception e){toast(e.getMessage()==null?"请核对输入":e.getMessage());}
         }));dialog.show();
     }
-    private void toggle(LinearLayout card,String label,String key,boolean value){Switch s=new Switch(this);s.setText(label);s.setTextColor(ink);s.setPadding(0,dp(12),0,dp(12));s.setChecked(value);s.setOnCheckedChangeListener((b,on)->{if(on&&key.equals("automatic")){s.setChecked(false);new AlertDialog.Builder(this).setTitle("开启明确消费自动入账？").setMessage("仅当通知明确显示支付成功、唯一金额及唯一付款账户时自动提交。新通知可能与手工记账重复，开启后请避免再次手工登记相同消费。未识别的信息仍需确认。").setPositiveButton("开启",(d,w)->{Vault.prefs(this).edit().putBoolean(key,true).apply();show();}).setNegativeButton("取消",null).show();return;}Vault.prefs(this).edit().putBoolean(key,on).apply();if(key.equals("pause_upload")&&!on)UploadJob.schedule(this);});card.addView(s);}
+    private void toggle(LinearLayout card,String label,String key,boolean value){Switch s=new Switch(this);s.setText(label);s.setTextColor(ink);s.setPadding(0,dp(12),0,dp(12));s.setChecked(value);s.setOnCheckedChangeListener((b,on)->{if(on&&key.equals("automatic")){s.setChecked(false);new AlertDialog.Builder(this).setTitle("开启明确消费自动入账？").setMessage("仅当通知明确显示支付成功、唯一金额及唯一付款账户时自动提交。新通知可能与手工记账重复，开启后请避免再次手工登记相同消费。未识别的信息仍需确认。").setPositiveButton("开启",(d,w)->{Vault.prefs(this).edit().putBoolean(key,true).apply();show();}).setNegativeButton("取消",null).show();return;}Vault.prefs(this).edit().putBoolean(key,on).apply();if(key.equals("pause_upload")&&!on)UploadJob.schedule(this);if(key.equals("capture")&&on)PaymentListener.scanNow();});card.addView(s);}
     private void settings(){
         LinearLayout connect=card();connect.addView(text("1 / 绑定归零手账",20,ink));connect.addView(text(bound()?"已绑定 · "+Vault.prefs(this).getString("agent_name",""):"使用独立的手机助手密钥，需 read + write 权限。",14,muted));
         button(connect,bound()?"刷新账户列表":"输入 API Key",()->{if(bound())refreshAccounts();else bind();});
@@ -144,6 +144,11 @@ public final class MainActivity extends Activity {
                 CaptureLog.add(this,"系统","请求重连","已请求系统重新连接通知服务");toast("已请求系统重连，请稍后返回设置查看状态");}
             catch(RuntimeException e){toast("重连请求失败，请在系统设置中关闭再开启通知使用权");}
         });
+        button(capture,"补查通知栏现存通知",()->{
+            if(!PaymentListener.scanNow()){toast("通知服务未连接，请先重连或重新开启通知使用权");return;}
+            toast("补查完成，请查看待确认和采集日志");show();
+        });
+        capture.addView(text("仅能补查通知栏当前还保留的通知；已清除的旧通知无法读取。补查结果只进入待确认，不会自动入账。",13,muted));
         button(capture,"查看采集日志",()->{page=3;show();});
         toggle(capture,"允许采集支付通知","capture",Vault.prefs(this).getBoolean("capture",false));
         toggle(capture,"明确消费自动入账","automatic",Vault.prefs(this).getBoolean("automatic",false));
@@ -152,13 +157,13 @@ public final class MainActivity extends Activity {
         String err=Vault.prefs(this).getString("capture_error","");if(!err.isEmpty())capture.addView(text(err,13,muted));
         LinearLayout help=card();help.addView(text("小米14安装与排查",20,ink));help.addView(text("① 安装后打开通知使用权；部分系统需先在应用信息页允许受限制的设置。\n② 在系统设置中搜索本应用的自启动、后台运行或省电设置，允许必要的后台运行。HyperOS版本不同，入口可能不同。\n③ 打开微信/支付宝系统通知及消息详情；微信支付消息不要设为免打扰。\n④ 锁屏、重启后各做一次实际支付通知测试。只在微信内显示的消息无法读取。\n⑤ 没有识别到账户时会停留在待确认，不会猜着扣款。",14,muted));
         button(help,"本地解析演示（不入账）",this::demo);
-        LinearLayout update=card();update.addView(text("应用更新 · 0.1.7",20,ink));
+        LinearLayout update=card();update.addView(text("应用更新 · 0.1.8",20,ink));
         button(update,"检查更新",()->AppUpdate.check(this));
         button(update,"安装已下载更新",()->AppUpdate.resumeInstall(this));
         LinearLayout privacy=card();privacy.addView(text("数据与隐私",20,ink));privacy.addView(text("系统通知权限范围较广，本应用在手机本地仅筛选微信和支付宝的指定支付服务消息。通知原文留在本机；服务器只接收确认后的记账字段。无广告、无分析SDK，不读取聊天数据库。密钥用Android Keystore加密保存，禁止系统备份。\n此版本不自动处理退款、转账或还款。匹配规则需要用你的真实通知验证，不能保证每笔都采集。",14,muted));
         button(privacy,"解除绑定并清空本地记录",()->new AlertDialog.Builder(this).setTitle("解除绑定").setMessage("只清空手机记录和密钥，服务器账本不会删除。为避免已发出但响应丢失的请求被重复记账，有待上传或提交被拒绝的记录时不能解除。先核对处理这些记录。")
             .setPositiveButton("确认解除",(d,w)->{try(Store s=new Store(this)){if(s.count("queued")>0||s.count("blocked")>0){toast("仍有提交中的记录，请先核对，或联系维护者处理");return;}s.clear();CaptureLog.clear(this);Vault.prefs(this).edit().clear().commit();getSystemService(android.app.job.JobScheduler.class).cancel(1001);show();}}).setNegativeButton("取消",null).show());
-        content.addView(text("归零记账助手 0.1.7 · Android 8.0+\n支付通知采集测试版",12,muted));
+        content.addView(text("归零记账助手 0.1.8 · Android 8.0+\n支付通知采集测试版",12,muted));
     }
     private void bind(){
         LinearLayout form=stack();form.setPadding(dp(20),dp(8),dp(20),dp(12));EditText key=field(form,"手机助手专用 API Key","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
