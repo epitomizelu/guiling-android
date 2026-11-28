@@ -10,7 +10,7 @@ apk = out / element['outputFile']
 data = apk.read_bytes()
 info = dict(versionCode=element['versionCode'], versionName=element['versionName'],
             file='guiling-%s.apk' % element['versionCode'], size=len(data),
-            sha256=hashlib.sha256(data).hexdigest(), notes='已忽略通知可恢复到待确认，再核对金额与账户；不会自动入账。')
+            sha256=hashlib.sha256(data).hexdigest(), notes='新增通知监听服务重连入口；断开时自动请求系统重连，并保留消费恢复功能。')
 (out / 'latest.json').write_text(json.dumps(info, ensure_ascii=False))
 archive = out / 'release.tar'
 with tarfile.open(archive, 'w') as t:

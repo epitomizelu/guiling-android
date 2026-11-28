@@ -8,7 +8,13 @@ import java.time.*;
 public final class PaymentListener extends NotificationListenerService {
     static volatile boolean connected=false;
     @Override public void onListenerConnected(){connected=true;CaptureLog.add(this,"系统","已连接","通知监听服务已连接，等待新通知");Vault.prefs(this).edit().putLong("connected_at",System.currentTimeMillis()).apply();UploadJob.schedule(this);}
-    @Override public void onListenerDisconnected(){connected=false;CaptureLog.add(this,"系统","已断开","通知监听服务断开");}
+    @Override public void onListenerDisconnected(){
+        connected=false;
+        CaptureLog.add(this,"系统","已断开","通知监听服务断开，已请求系统重连");
+        try{requestRebind(new ComponentName(this,PaymentListener.class));}
+        catch(RuntimeException e){CaptureLog.add(this,"系统","重连失败","请在系统设置中重新开启通知使用权");}
+    }
+    @Override public void onDestroy(){connected=false;super.onDestroy();}
     @Override public void onNotificationPosted(StatusBarNotification sbn){
         String pkg=sbn.getPackageName();if(!pkg.equals("com.tencent.mm")&&!pkg.equals("com.eg.android.AlipayGphone"))return;
         String source=pkg.equals("com.tencent.mm")?"微信":"支付宝";
